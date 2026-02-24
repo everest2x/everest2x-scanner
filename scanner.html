@@ -136,8 +136,20 @@
     async function startScanner() {
       if (!checkOpenedFromApp()) return;
       if (isRunning) return;
-      const startBtn = document.getElementById("startBtn");
-      const stopBtn = document.getElementById("stopBtn");
+      const startBtnEl = document.getElementById("startBtn");
+      const stopBtnEl = document.getElementById("stopBtn");
+
+      if (startBtnEl) {
+        startBtnEl.classList.remove("hidden");
+        startBtnEl.disabled = false;
+        startBtnEl.style.opacity = "1";
+        startBtnEl.style.cursor = "pointer";
+        startBtnEl.innerText = "Újrapróbálás";
+      }
+
+      if (stopBtnEl) {
+        stopBtnEl.classList.add("hidden");
+      }
 
       startBtn.classList.add("hidden");
       stopBtn.classList.remove("hidden");

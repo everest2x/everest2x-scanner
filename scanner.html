@@ -42,7 +42,7 @@
 
     // Fontos: a webapp returnUrl paramétert küld
     // (fallback: return, ha régi link maradt valahol)
-    const returnUrl = qs.get("returnUrl") || qs.get("return") || "";
+    const returnUrl = qs.get("returnUrl") || "";
 
     const msg = document.getElementById("msg");
     const startBtn = document.getElementById("startBtn");

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Everest2X Scanner</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 12px; background: #f3f4f6; }
+    .card { max-width: 520px; margin: 0 auto; background: #fff; border-radius: 16px; padding: 16px; box-shadow: 0 4px 14px rgba(0,0,0,.12); }
+    #reader { width: 100%; border-radius: 12px; overflow: hidden; background: #000; }
+    .btn { width: 100%; margin-top: 10px; padding: 14px; border: 0; border-radius: 10px; font-weight: bold; cursor: pointer; }
+    .btn-primary { background: #1a73e8; color: #fff; }
+    .btn-danger { background: #d93025; color: #fff; display: none; }
+    .btn-secondary { background: #666; color: #fff; }
+    #msg { margin-top: 10px; display: none; padding: 10px; border-radius: 8px; color: #fff; white-space: pre-line; }
+    .warn { background: #fbbc04; }
+    .ok { background: #34a853; }
+    .err { background: #d93025; }
+    .small { margin-top: 8px; font-size: 12px; color: #666; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2 style="margin:0 0 10px 0;">Everest2X – QR beolvasás</h2>
+
+    <div id="reader"></div>
+
+    <button id="startBtn" class="btn btn-primary" type="button">BEOLVASÁS INDÍTÁSA</button>
+    <button id="stopBtn" class="btn btn-danger" type="button">SCANNELÉS MEGSZAKÍTÁSA</button>
+    <button id="backBtn" class="btn btn-secondary" type="button">VISSZA AZ ALKALMAZÁSHOZ</button>
+
+    <div id="msg"></div>
+    <div id="debug" class="small"></div>
+  </div>
+
+  <script>
+    let qrScanner = null;
+    let isProcessing = false;
+
+    const qs = new URLSearchParams(location.search);
+    const returnUrl = qs.get("return") || "";
+
+    const reader = document.getElementById("reader");
+    const msg = document.getElementById("msg");
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
+    const backBtn = document.getElementById("backBtn");
+    const debug = document.getElementById("debug");
+
+    function setMsg(text, cls) {
+      msg.style.display = "block";
+      msg.className = cls || "";
+      msg.innerText = text;
+    }
+
+    function clearMsg() {
+      msg.style.display = "none";
+      msg.className = "";
+      msg.innerText = "";
+    }
+
+    function showDebug() {
+      let topSelf = false;
+      try { topSelf = (window.top === window.self); } catch(e) {}
+      debug.innerText =
+        "origin: " + location.origin + "\n" +
+        "host: " + location.host + "\n" +
+        "secure: " + (location.protocol === "https:") + "\n" +
+        "top===self: " + topSelf + "\n" +
+        "return: " + returnUrl;
+    }
+
+    async function stopScannerInternal() {
+      if (qrScanner) {
+        try { await qrScanner.stop(); } catch(e) {}
+        try { qrScanner.clear(); } catch(e) {}
+        qrScanner = null;
+      }
+      stopBtn.style.display = "none";
+      startBtn.style.display = "block";
+    }
+
+    function redirectBackWithResult(qrText, lat, lng) {
+      if (!returnUrl) {
+        setMsg("❌ Hiányzik a return URL.", "err");
+        return;
+      }
+
+      const sep = returnUrl.includes("?") ? "&" : "?";
+      const url =
+        returnUrl + sep +
+        "scan=1" +
+        "&qr=" + encodeURIComponent(qrText || "") +
+        "&lat=" + encodeURIComponent(String(lat ?? "")) +
+        "&lng=" + encodeURIComponent(String(lng ?? "")) +
+        "&ts=" + Date.now();
+
+      window.location.href = url;
+    }
+
+    function getGpsThenReturn(qrText) {
+      setMsg("🛰️ GPS pozíció lekérése...", "warn");
+
+      if (!navigator.geolocation) {
+        // Ha nincs geolocation, üres koordinátával is visszamehet (ha a backend kezeli)
+        redirectBackWithResult(qrText, "", "");
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          redirectBackWithResult(qrText, pos.coords.latitude, pos.coords.longitude);
+        },
+        err => {
+          // GPS hiba esetén is visszaküldjük, backend dönt
+          redirectBackWithResult(qrText, "", "");
+        },
+        { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
+      );
+    }
+
+    async function onScanSuccess(decodedText) {
+      if (isProcessing) return;
+      isProcessing = true;
+
+      setMsg("⏳ QR beolvasva, feldolgozás...", "warn");
+
+      try {
+        await stopScannerInternal();
+      } catch(e) {}
+
+      getGpsThenReturn(decodedText);
+    }
+
+    async function startScanner() {
+      if (isProcessing) return;
+      showDebug();
+
+      try {
+        clearMsg();
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error("A böngésző nem támogatja a kamera elérést.");
+        }
+
+        // gyors permission trigger / ellenőrzés (opcionális, de hasznos)
+        // Nem kötelező külön meghívni, a html5-qrcode.start is kérhet engedélyt.
+        // Itt direkt kihagyjuk, hogy ne nyissunk két streamet.
+
+        await stopScannerInternal();
+
+        qrScanner = new Html5Qrcode("reader");
+
+        startBtn.style.display = "none";
+        stopBtn.style.display = "block";
+
+        setMsg("📷 Kamera inicializálása...", "warn");
+
+        await qrScanner.start(
+          { facingMode: "environment" },
+          { fps: 12, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
+          onScanSuccess
+        );
+
+        clearMsg();
+
+      } catch (err) {
+        console.error("Scanner start hiba:", err);
+        const s = String(err || "");
+
+        if (s.includes("NotAllowedError") || s.includes("Permission")) {
+          setMsg("❌ Kamera engedély megtagadva a böngészőben.", "err");
+        } else if (s.includes("NotFoundError") || s.includes("OverconstrainedError")) {
+          setMsg("❌ Nem található használható kamera.", "err");
+        } else if (s.includes("NotReadableError")) {
+          setMsg("❌ A kamera foglalt (másik app használja?).", "err");
+        } else {
+          setMsg("❌ Hiba: " + s, "err");
+        }
+
+        await stopScannerInternal();
+      }
+    }
+
+    async function stopScanner() {
+      isProcessing = false;
+      setMsg("Scannelés megszakítva.", "warn");
+      await stopScannerInternal();
+    }
+
+    function goBack() {
+      if (returnUrl) window.location.href = returnUrl + (returnUrl.includes("?") ? "&" : "?") + "ts=" + Date.now();
+      else history.back();
+    }
+
+    startBtn.addEventListener("click", startScanner);
+    stopBtn.addEventListener("click", stopScanner);
+    backBtn.addEventListener("click", goBack);
+
+    showDebug();
+  </script>
+</body>
+</html>

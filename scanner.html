@@ -167,23 +167,27 @@
           { deviceId: { exact: cam.id } },
           { fps: 10, qrbox: 250 },
           async (decodedText) => {
-            if (!isRunning) return;
-            isRunning = false;
+          if (!isRunning) return;
+          isRunning = false;
 
-            setMsg("✅ QR beolvasva, küldés a főoldalra...", "ok");
-            // ELŐSZÖR küldjük vissza a főoldalnak (ne akadjon meg a stop miatt)
-            postCloseSignalOnce({ type: "SCAN_SUCCESS", qrText: decodedText });
-  
-            // Utána takarítsunk és zárjunk
-            setTimeout(async () => {
-              try { if (qrScanner) await qrScanner.stop(); } catch(e) {}
-              try { if (qrScanner) qrScanner.clear(); } catch(e) {}
-              qrScanner = null;
+          setMsg("✅ QR beolvasva, küldés a főoldalra...", "ok");
 
-              try { window.close(); } catch(e) {}
-            }, 50);
-            
-          }
+          // Gombok elrejtése (vizuális finomítás)
+          document.getElementById("stopBtn")?.classList.add("hidden");
+          document.getElementById("startBtn")?.classList.add("hidden");
+
+          // ELŐSZÖR küldjük vissza a főoldalnak (ne akadjon meg a stop miatt)
+          postCloseSignalOnce({ type: "SCAN_SUCCESS", qrText: decodedText });
+
+          // Utána takarítsunk és zárjunk
+          setTimeout(async () => {
+            try { if (qrScanner) await qrScanner.stop(); } catch(e) {}
+            try { if (qrScanner) qrScanner.clear(); } catch(e) {}
+            qrScanner = null;
+
+            try { window.close(); } catch(e) {}
+          }, 50);
+        }
         );
 
         setMsg("📷 Irányítsd a kamerát a QR kódra...", "warn");

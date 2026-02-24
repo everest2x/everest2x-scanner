@@ -81,7 +81,9 @@
   <script>
     let qrScanner = null;
     let isRunning = false;
-
+    // Ne küldjünk ugyanarról az eseményről több postMessage-et
+    let closeSignalSent = false;
+    
     function postToOpener(payload) {
       try {
         if (window.opener && !window.opener.closed) {
@@ -101,7 +103,37 @@
       m.innerText = text;
     }
 
+  function checkOpenedFromApp() {
+  const hasOpener = !!(window.opener && !window.opener.closed);
+
+  if (!hasOpener) {
+    setMsg(
+      "ℹ️ Ez a scanner önállóan lett megnyitva.\nAz Everest2X alkalmazásból indítsd a beolvasást.",
+      "err"
+    );
+
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
+
+    if (startBtn) {
+      startBtn.disabled = true;
+      startBtn.style.opacity = "0.6";
+      startBtn.style.cursor = "not-allowed";
+      startBtn.innerText = "Kamera indítása (csak az alkalmazásból)";
+    }
+
+    if (stopBtn) {
+      stopBtn.classList.add("hidden");
+    }
+
+    return false;
+  }
+
+  return true;
+}
+    
     async function startScanner() {
+      if (!checkOpenedFromApp()) return;
       const startBtn = document.getElementById("startBtn");
       const stopBtn = document.getElementById("stopBtn");
 
@@ -139,14 +171,18 @@
             isRunning = false;
 
             setMsg("✅ QR beolvasva, küldés a főoldalra...", "ok");
+            // ELŐSZÖR küldjük vissza a főoldalnak (ne akadjon meg a stop miatt)
+            postCloseSignalOnce({ type: "SCAN_SUCCESS", qrText: decodedText });
+  
+            // Utána takarítsunk és zárjunk
+            setTimeout(async () => {
+              try { if (qrScanner) await qrScanner.stop(); } catch(e) {}
+              try { if (qrScanner) qrScanner.clear(); } catch(e) {}
+              qrScanner = null;
 
-            try { await qrScanner.stop(); } catch(e) {}
-            try { qrScanner.clear(); } catch(e) {}
-
-            postToOpener({ type: "SCAN_SUCCESS", qrText: decodedText });
-
-            // rövid késleltetés, hogy a postMessage biztosan kimenjen
-            setTimeout(() => window.close(), 300);
+              try { window.close(); } catch(e) {}
+            }, 50);
+            
           }
         );
 
@@ -164,11 +200,18 @@
         else if (code === "OverconstrainedError") hint = " (Nem elérhető kamera mód.)";
 
         setMsg(`❌ Kamera hiba${hint}\n${code ? code + ": " : ""}${text}`, "err");
-        postToOpener({ type: "SCAN_ERROR", message: `${code ? code + ": " : ""}${text}` });
+        postCloseSignalOnce({ type: "SCAN_ERROR", message: `${code ? code + ": " : ""}${text}` });
 
         document.getElementById("startBtn").classList.remove("hidden");
         document.getElementById("stopBtn").classList.add("hidden");
       }
+    }
+
+    function postCloseSignalOnce(payload) {
+      if (closeSignalSent) return false;
+      closeSignalSent = true;
+      postToOpener(payload);
+      return true;
     }
 
     async function stopScanner() {
@@ -182,7 +225,7 @@
         }
       } catch(e) {}
 
-      postToOpener({ type: "SCAN_CANCELLED" });
+      postCloseSignalOnce({ type: "SCAN_CANCELLED" });
 
       setTimeout(() => window.close(), 150);
     }
@@ -191,14 +234,16 @@
     document.getElementById("stopBtn").addEventListener("click", stopScanner);
 
     document.getElementById("closeBtn").addEventListener("click", () => {
-      postToOpener({ type: "SCAN_CANCELLED" });
+      postCloseSignalOnce({ type: "SCAN_CANCELLED" });
       window.close();
     });
 
     // Ha a user X-szel zárja be, próbáljunk jelezni
     window.addEventListener("beforeunload", () => {
-      postToOpener({ type: "SCAN_CANCELLED" });
+      postCloseSignalOnce({ type: "SCAN_CANCELLED" });
     });
+
+    checkOpenedFromApp();
   </script>
 </body>
 </html>

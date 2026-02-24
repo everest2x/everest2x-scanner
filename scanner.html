@@ -105,6 +105,13 @@
       m.innerText = text;
     }
 
+    function refreshCloseButtonLabel() {
+      const closeBtn = document.getElementById("closeBtn");
+      if (!closeBtn) return;
+
+      closeBtn.innerText = isRunning ? "Bezárás (megszakítás)" : "Bezárás";
+    }
+    
   function clearScanHintTimer() {
     if (scanHintTimer) {
       clearTimeout(scanHintTimer);
@@ -112,6 +119,8 @@
     }
   }  
 
+  refreshCloseButtonLabel();
+    
   function checkOpenedFromApp() {
   const hasOpener = !!(window.opener && !window.opener.closed);
 
@@ -141,107 +150,120 @@
   return true;
 }
     
-    async function startScanner() {
-      if (!checkOpenedFromApp()) return;
-      if (isRunning) return;
-      const startBtnEl = document.getElementById("startBtn");
-      const stopBtnEl = document.getElementById("stopBtn");
+   async function startScanner() {
+  if (!checkOpenedFromApp()) return;
+  if (isRunning) return;
 
-      if (startBtnEl) {
-        startBtnEl.classList.remove("hidden");
-        startBtnEl.disabled = false;
-        startBtnEl.style.opacity = "1";
-        startBtnEl.style.cursor = "pointer";
-        startBtnEl.innerText = "Újrapróbálás";
-      }
+  const startBtnEl = document.getElementById("startBtn");
+  const stopBtnEl = document.getElementById("stopBtn");
 
-      if (stopBtnEl) {
-        stopBtnEl.classList.add("hidden");
-      }
+  // Normál alapfelirat (ne ragadjon "Újrapróbálás"-on)
+  if (startBtnEl) {
+    startBtnEl.innerText = "Kamera indítása";
+  }
 
-      startBtn.classList.add("hidden");
-      stopBtn.classList.remove("hidden");
+  if (startBtnEl) startBtnEl.classList.add("hidden");
+  if (stopBtnEl) stopBtnEl.classList.remove("hidden");
 
-      setMsg("📷 Kamera keresése...", "warn");
+  setMsg("📷 Kamera keresése...", "warn");
 
-      try {
-        // biztos takarítás
-        if (qrScanner) {
-          try { await qrScanner.stop(); } catch(e) {}
-          try { qrScanner.clear(); } catch(e) {}
-          qrScanner = null;
-        }
+  try {
+    // biztos takarítás
+    if (qrScanner) {
+      try { await qrScanner.stop(); } catch (e) {}
+      try { qrScanner.clear(); } catch (e) {}
+      qrScanner = null;
+    }
 
-        const cameras = await Html5Qrcode.getCameras();
-        if (!cameras || cameras.length === 0) {
-          throw new Error("Nincs elérhető kamera.");
-        }
+    const cameras = await Html5Qrcode.getCameras();
+    if (!cameras || cameras.length === 0) {
+      throw new Error("Nincs elérhető kamera.");
+    }
 
-        let cam = cameras.find(c => /back|rear|environment/i.test(c.label || ""))
-               || cameras[cameras.length - 1];
+    let cam = cameras.find(c => /back|rear|environment/i.test(c.label || ""))
+           || cameras[cameras.length - 1];
 
-        setMsg("📷 Kamera indítása...", "warn");
+    setMsg("📷 Kamera indítása...", "warn");
 
-        qrScanner = new Html5Qrcode("reader");
-        isRunning = true;
-
-        await qrScanner.start(
-          { deviceId: { exact: cam.id } },
-          { fps: 10, qrbox: 250 },
-          async (decodedText) => {
-          if (!isRunning) return;
-          isRunning = false;
-          clearScanHintTimer();
-
-          setMsg("✅ QR beolvasva, küldés a főoldalra...", "ok");
-
-          // Gombok elrejtése (vizuális finomítás)
-          document.getElementById("stopBtn")?.classList.add("hidden");
-          document.getElementById("startBtn")?.classList.add("hidden");
-
-          // ELŐSZÖR küldjük vissza a főoldalnak (ne akadjon meg a stop miatt)
-          postCloseSignalOnce({ type: "SCAN_SUCCESS", qrText: decodedText });
-
-          // Utána takarítsunk és zárjunk
-          setTimeout(async () => {
-            try { if (qrScanner) await qrScanner.stop(); } catch(e) {}
-            try { if (qrScanner) qrScanner.clear(); } catch(e) {}
-            qrScanner = null;
-
-            try { window.close(); } catch(e) {}
-          }, 50);
-        }
-        );
-
-        setMsg("📷 Irányítsd a kamerát a QR kódra...", "warn");
-        clearScanHintTimer();
-
-        scanHintTimer = setTimeout(() => {
-          // csak akkor írjunk ki üzenetet, ha még mindig fut a scanner
-          if (isRunning) {
-            setMsg("⏳ Még nincs beolvasás.\nIrányítsd a kamerát a QR kódra, vagy nyomj megszakítást és próbáld újra.", "warn");
-          }
-        }, 90000); // 90 mp
-
-      } catch (err) {
+    qrScanner = new Html5Qrcode("reader");
+    isRunning = true;
+    refreshCloseButtonLabel();
+    
+    await qrScanner.start(
+      { deviceId: { exact: cam.id } },
+      { fps: 10, qrbox: 250 },
+      async (decodedText) => {
+        if (!isRunning) return;
         isRunning = false;
         clearScanHintTimer();
+        refreshCloseButtonLabel();
 
-        const code = err && err.name ? err.name : "";
-        const text = err && err.message ? err.message : String(err);
+        setMsg("✅ QR beolvasva, küldés a főoldalra...", "ok");
 
-        let hint = "";
-        if (code === "NotAllowedError") hint = " (Kamera engedély tiltva.)";
-        else if (code === "NotReadableError") hint = " (A kamera foglalt.)";
-        else if (code === "OverconstrainedError") hint = " (Nem elérhető kamera mód.)";
+        // Gombok elrejtése (vizuális finomítás)
+        document.getElementById("stopBtn")?.classList.add("hidden");
+        document.getElementById("startBtn")?.classList.add("hidden");
 
-        setMsg(`❌ Kamera hiba${hint}\n${code ? code + ": " : ""}${text}`, "err");
-        postCloseSignalOnce({ type: "SCAN_ERROR", message: `${code ? code + ": " : ""}${text}` });
+        // ELŐSZÖR küldjük vissza a főoldalnak (ne akadjon meg a stop miatt)
+        postCloseSignalOnce({ type: "SCAN_SUCCESS", qrText: decodedText });
 
-        document.getElementById("startBtn").classList.remove("hidden");
-        document.getElementById("stopBtn").classList.add("hidden");
+        // Utána takarítsunk és zárjunk
+        setTimeout(async () => {
+          try { if (qrScanner) await qrScanner.stop(); } catch (e) {}
+          try { if (qrScanner) qrScanner.clear(); } catch (e) {}
+          qrScanner = null;
+
+          try { window.close(); } catch (e) {}
+        }, 50);
       }
+    );
+
+    setMsg("📷 Irányítsd a kamerát a QR kódra...", "warn");
+
+    clearScanHintTimer();
+    scanHintTimer = setTimeout(() => {
+      // csak akkor írjunk ki üzenetet, ha még mindig fut a scanner
+      if (isRunning) {
+        setMsg(
+          "⏳ Még nincs beolvasás.\nIrányítsd a kamerát a QR kódra, vagy nyomj megszakítást és próbáld újra.",
+          "warn"
+        );
+      }
+    }, 90000); // 90 mp
+
+  } catch (err) {
+    isRunning = false;
+    clearScanHintTimer();
+    refreshCloseButtonLabel();
+
+    const code = err && err.name ? err.name : "";
+    const text = err && err.message ? err.message : String(err);
+
+    let hint = "";
+    if (code === "NotAllowedError") hint = " (Kamera engedély tiltva.)";
+    else if (code === "NotReadableError") hint = " (A kamera foglalt.)";
+    else if (code === "OverconstrainedError") hint = " (Nem elérhető kamera mód.)";
+
+    setMsg(`❌ Kamera hiba${hint}\n${code ? code + ": " : ""}${text}`, "err");
+    // Nem küldünk azonnal SCAN_ERROR-t a főoldalnak,
+    // mert a felhasználó még tud "Újrapróbálás"-t nyomni a popupban.
+
+    const startBtnRetry = document.getElementById("startBtn");
+    const stopBtnRetry = document.getElementById("stopBtn");
+
+    if (startBtnRetry) {
+      startBtnRetry.classList.remove("hidden");
+      startBtnRetry.disabled = false;
+      startBtnRetry.style.opacity = "1";
+      startBtnRetry.style.cursor = "pointer";
+      startBtnRetry.innerText = "Újrapróbálás";
     }
+
+    if (stopBtnRetry) {
+      stopBtnRetry.classList.add("hidden");
+    }
+  }
+}
 
     function postCloseSignalOnce(payload) {
       if (closeSignalSent) return false;
@@ -253,6 +275,7 @@
     async function stopScanner() {
       isRunning = false;
       clearScanHintTimer();
+      refreshCloseButtonLabel();
 
       try {
         if (qrScanner) {
@@ -280,9 +303,9 @@
       postCloseSignalOnce({ type: "SCAN_CANCELLED" });
     });
 
-    checkOpenedFromApp();
-    if (checkOpenedFromApp()) {
-      // kis késleltetés, hogy a DOM biztosan stabil legyen
+    const openedFromApp = checkOpenedFromApp();
+
+    if (openedFromApp) {
       setTimeout(() => {
         if (!autoStartTried && !isRunning) {
           autoStartTried = true;

@@ -17,7 +17,7 @@
     .warn { background: #fbbc04; }
     .ok { background: #34a853; }
     .err { background: #d93025; }
-    .small { margin-top: 8px; font-size: 12px; color: #666; word-break: break-all; }
+    .small { margin-top: 8px; font-size: 12px; color: #666; word-break: break-all; white-space: pre-line; }
   </style>
 </head>
 <body>
@@ -39,9 +39,11 @@
     let isProcessing = false;
 
     const qs = new URLSearchParams(location.search);
-    const returnUrl = qs.get("return") || "";
 
-    const reader = document.getElementById("reader");
+    // Fontos: a webapp returnUrl paramétert küld
+    // (fallback: return, ha régi link maradt valahol)
+    const returnUrl = qs.get("returnUrl") || qs.get("return") || "";
+
     const msg = document.getElementById("msg");
     const startBtn = document.getElementById("startBtn");
     const stopBtn = document.getElementById("stopBtn");
@@ -62,19 +64,20 @@
 
     function showDebug() {
       let topSelf = false;
-      try { topSelf = (window.top === window.self); } catch(e) {}
+      try { topSelf = (window.top === window.self); } catch (e) {}
+
       debug.innerText =
         "origin: " + location.origin + "\n" +
         "host: " + location.host + "\n" +
         "secure: " + (location.protocol === "https:") + "\n" +
         "top===self: " + topSelf + "\n" +
-        "return: " + returnUrl;
+        "returnUrl: " + returnUrl;
     }
 
     async function stopScannerInternal() {
       if (qrScanner) {
-        try { await qrScanner.stop(); } catch(e) {}
-        try { qrScanner.clear(); } catch(e) {}
+        try { await qrScanner.stop(); } catch (e) {}
+        try { qrScanner.clear(); } catch (e) {}
         qrScanner = null;
       }
       stopBtn.style.display = "none";
@@ -103,16 +106,16 @@
       setMsg("🛰️ GPS pozíció lekérése...", "warn");
 
       if (!navigator.geolocation) {
-        // Ha nincs geolocation, üres koordinátával is visszamehet (ha a backend kezeli)
+        // Backend eldönti, mit csinál GPS nélkül
         redirectBackWithResult(qrText, "", "");
         return;
       }
 
       navigator.geolocation.getCurrentPosition(
-        pos => {
+        (pos) => {
           redirectBackWithResult(qrText, pos.coords.latitude, pos.coords.longitude);
         },
-        err => {
+        (err) => {
           // GPS hiba esetén is visszaküldjük, backend dönt
           redirectBackWithResult(qrText, "", "");
         },
@@ -128,7 +131,7 @@
 
       try {
         await stopScannerInternal();
-      } catch(e) {}
+      } catch (e) {}
 
       getGpsThenReturn(decodedText);
     }
@@ -143,10 +146,6 @@
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
           throw new Error("A böngésző nem támogatja a kamera elérést.");
         }
-
-        // gyors permission trigger / ellenőrzés (opcionális, de hasznos)
-        // Nem kötelező külön meghívni, a html5-qrcode.start is kérhet engedélyt.
-        // Itt direkt kihagyjuk, hogy ne nyissunk két streamet.
 
         await stopScannerInternal();
 
@@ -190,8 +189,11 @@
     }
 
     function goBack() {
-      if (returnUrl) window.location.href = returnUrl + (returnUrl.includes("?") ? "&" : "?") + "ts=" + Date.now();
-      else history.back();
+      if (returnUrl) {
+        window.location.href = returnUrl + (returnUrl.includes("?") ? "&" : "?") + "ts=" + Date.now();
+      } else {
+        history.back();
+      }
     }
 
     startBtn.addEventListener("click", startScanner);

@@ -84,6 +84,7 @@
     // Ne küldjünk ugyanarról az eseményről több postMessage-et
     let closeSignalSent = false;
     let autoStartTried = false;
+    let scanHintTimer = null;
     
     function postToOpener(payload) {
       try {
@@ -103,6 +104,13 @@
       m.className = cls || "warn";
       m.innerText = text;
     }
+
+  function clearScanHintTimer() {
+    if (scanHintTimer) {
+      clearTimeout(scanHintTimer);
+      scanHintTimer = null;
+    }
+  }  
 
   function checkOpenedFromApp() {
   const hasOpener = !!(window.opener && !window.opener.closed);
@@ -183,6 +191,7 @@
           async (decodedText) => {
           if (!isRunning) return;
           isRunning = false;
+          clearScanHintTimer();
 
           setMsg("✅ QR beolvasva, küldés a főoldalra...", "ok");
 
@@ -205,9 +214,18 @@
         );
 
         setMsg("📷 Irányítsd a kamerát a QR kódra...", "warn");
+        clearScanHintTimer();
+
+        scanHintTimer = setTimeout(() => {
+          // csak akkor írjunk ki üzenetet, ha még mindig fut a scanner
+          if (isRunning) {
+            setMsg("⏳ Még nincs beolvasás.\nIrányítsd a kamerát a QR kódra, vagy nyomj megszakítást és próbáld újra.", "warn");
+          }
+        }, 90000); // 90 mp
 
       } catch (err) {
         isRunning = false;
+        clearScanHintTimer();
 
         const code = err && err.name ? err.name : "";
         const text = err && err.message ? err.message : String(err);
@@ -234,6 +252,7 @@
 
     async function stopScanner() {
       isRunning = false;
+      clearScanHintTimer();
 
       try {
         if (qrScanner) {

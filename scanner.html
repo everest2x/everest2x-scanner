@@ -42,7 +42,6 @@
     }
     .btn-start { background: #1a73e8; }
     .btn-stop { background: #d93025; }
-    .btn-close { background: #666; }
     #msg {
       margin-top: 10px;
       padding: 10px;
@@ -70,8 +69,7 @@
 
     <button id="startBtn" class="btn btn-start">Kamera indítása</button>
     <button id="stopBtn" class="btn btn-stop hidden">Scannelés megszakítása</button>
-    <button id="closeBtn" class="btn btn-close">Bezárás</button>
-
+    
     <div id="msg" class="warn">Scanner előkészítése...</div>
     <div class="small">
       A sikeres beolvasás után a kód visszakerül az Everest2X főoldalra.
@@ -106,10 +104,10 @@
     }
 
     function refreshCloseButtonLabel() {
-      const closeBtn = document.getElementById("closeBtn");
-      if (!closeBtn) return;
+      const stopBtn = document.getElementById("stopBtn");
+      if (!stopBtn) return;
 
-      closeBtn.innerText = isRunning ? "Bezárás (megszakítás)" : "Bezárás";
+      stopBtn.innerText = isRunning ? "Scannelés megszakítása" : "Bezárás";
     }
     
   function clearScanHintTimer() {
@@ -292,11 +290,6 @@
 
     document.getElementById("startBtn").addEventListener("click", startScanner);
     document.getElementById("stopBtn").addEventListener("click", stopScanner);
-
-    document.getElementById("closeBtn").addEventListener("click", () => {
-      postCloseSignalOnce({ type: "SCAN_CANCELLED" });
-      window.close();
-    });
 
     // Ha a user X-szel zárja be, próbáljunk jelezni
     window.addEventListener("beforeunload", () => {

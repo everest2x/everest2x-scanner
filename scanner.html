@@ -97,11 +97,19 @@
       }
     }
 
-    function setMsg(text, cls) {
-      const m = document.getElementById("msg");
-      m.className = cls || "warn";
-      m.innerText = text;
-    }
+ function setMsg(text, cls) {
+  const m = document.getElementById("msg");
+  if (!m) return;
+
+  if (!text) {
+    m.className = "hidden";
+    m.innerText = "";
+    return;
+  }
+
+  m.className = cls || "warn";
+  m.innerText = text;
+}
 
     function refreshCloseButtonLabel() {
       const stopBtn = document.getElementById("stopBtn");
@@ -163,7 +171,7 @@
   if (startBtnEl) startBtnEl.classList.add("hidden");
   if (stopBtnEl) stopBtnEl.classList.remove("hidden");
 
-  setMsg("📷 Kamera keresése...", "warn");
+  setMsg("📷 Kamera megnyitása...", "warn");
 
   try {
     // biztos takarítás
@@ -227,7 +235,7 @@
           "warn"
         );
       }
-    }, 90000); // 90 mp
+    }, 30000); // 30 mp
 
   } catch (err) {
     isRunning = false;
